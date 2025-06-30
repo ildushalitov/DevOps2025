@@ -1,0 +1,40 @@
+version: '3.8'
+
+volumes:
+  esdata:
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.2
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false   # отключить безопасность, если нужно
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+
+  fluent-bit:
+    image: fluent/fluent-bit:2.2.0
+    volumes:
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+    depends_on:
+      - elasticsearch
+
+  grafana:
+    image: grafana/grafana:9.3.2
+    ports:
+      - "3001:3000"
+    depends_on:
+      - elasticsearch
+
+  app:
+    image: my-node-app:${TAG}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - elasticsearch
