@@ -1,0 +1,73 @@
+---
+- name: Configure user and SSH on Ubuntu VM
+  hosts: ubuntu_vm
+  become: true
+  vars:
+    username: devuser
+    ssh_pub_key_path: "~/.ssh/id_ed25519.pub"
+
+  tasks:
+    - name: Read SSH public key (from WSL)
+      slurp:
+        src: "{{ ssh_pub_key_path }}"
+      register: ssh_pub_key_file
+      delegate_to: localhost
+      become: false
+
+    - name: Create a new user
+      user:
+        name: "{{ username }}"
+        shell: /bin/bash
+        state: present
+        create_home: yes
+
+    - name: Add user to sudo group
+      user:
+        name: "{{ username }}"
+        groups: sudo
+        append: yes
+
+    - name: Create .ssh directory
+      file:
+        path: "/home/{{ username }}/.ssh"
+        state: directory
+        mode: '0700'
+        owner: "{{ username }}"
+        group: "{{ username }}"
+
+    - name: Upload SSH public key
+      copy:
+        content: "{{ ssh_pub_key_file.content | b64decode }}"
+        dest: "/home/{{ username }}/.ssh/authorized_keys"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0600'
+
+    - name: Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+        backrefs: yes
+
+    - name: Ensure PubkeyAuthentication is enabled
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PubkeyAuthentication'
+        line: 'PubkeyAuthentication yes'
+        state: present
+        backrefs: yes
+
+    - name: Restart SSH service
+      service:
+        name: ssh
+        state: restarted
+
+    - name: Create directory in /opt with 660 permissions
+      file:
+        path: "/opt/{{ username }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0660'
